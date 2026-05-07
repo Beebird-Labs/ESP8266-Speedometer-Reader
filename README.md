@@ -8,7 +8,7 @@ This project uses an ESP8266 to read pulses from a speed sensor (such as a Vehic
 - **Advanced Filtering & Smoothing**:
   - **Physics-Based Glitch Filter**: Rejects impossible acceleration or deceleration (e.g., dropped or false double-pulses).
   - **Parametric Smoothing**: Applies an exponential moving average to stabilize speed readings.
-- **Low Latency Wireless**: Uses ESP-NOW to broadcast the calculated speed to a receiver at 50ms intervals.
+- **Low Latency Wireless**: Uses ESP-NOW to broadcast the calculated speed to a receiver at 100ms intervals.
 - **Built-in Test Mode**: Simulates speed profiles (acceleration/deceleration ramps) for testing the receiver without needing active sensor input.
 
 ## Hardware Requirements
@@ -40,7 +40,7 @@ Adjust these macros in `main.cpp` based on your specific vehicle or sensor:
 
 - `PULSE_FREQ_TO_MPH`: The conversion factor from pulse frequency (Hz) to MPH.
 - `SPEED_PIN`: The GPIO pin connected to your sensor (Default is `5`).
-- `FILTER_WEIGHT`: Controls the amount of smoothing applied to the final output (Default `0.15f`).
+- `FILTER_WEIGHT`: Controls the amount of smoothing applied to the final output (Default `0.40f`).
 - `SPEED_DEADZONE_US`: Hardware debounce duration in microseconds to prevent false triggers (Default `2000UL`).
 
 ## Usage

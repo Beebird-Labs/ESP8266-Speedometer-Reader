@@ -11,10 +11,10 @@
 #define WIFI_CHANNEL 1
 
 // Sampling frequency
-#define SAMPLE_INTERVAL_MS 50 // Changed from 100ms to 50ms
+#define SAMPLE_INTERVAL_MS 100
 
 // Speed sensor tuning
-#define FILTER_WEIGHT 0.15f // Parameterized smoothing
+#define FILTER_WEIGHT 0.40f // Parameterized smoothing
 #define PULSE_FREQ_TO_MPH 1.139f
 #define SPEED_DEADZONE_US 2000UL
 #define SNAP_TO_ZERO_US 500000UL
@@ -119,91 +119,115 @@ static void test_mode_tick()
 static void sample_and_send()
 {
   float current_mph;
+  uint32_t now = micros();
 
-  // 1. Safely grab accumulators
-  noInterrupts();
-  uint32_t acc_period = s_acc_period_us;
-  uint32_t acc_pulses = s_acc_pulses;
-  uint32_t last_pulse = s_last_pulse_us;
-
-  if (acc_pulses > 0)
+  if (s_test_mode)
   {
+    test_mode_tick();
+    current_mph = s_test_speed;
+    s_last_valid_mph = current_mph;
+
+    // Keep accumulators clear while in test mode to prevent a flood of stale data when test mode ends
+    noInterrupts();
     s_acc_period_us = 0;
     s_acc_pulses = 0;
-  }
-
-  uint32_t now = micros();
-  uint32_t time_since_last = (last_pulse > 0) ? (now - last_pulse) : 0;
-
-  // SAFE TIMEOUT RESET: Must be inside noInterrupts to prevent ISR race conditions
-  if (time_since_last > SNAP_TO_ZERO_US)
-  {
     s_last_pulse_us = 0;
-    last_pulse = 0;
-  }
-  interrupts();
+    interrupts();
 
-  // 2. Calculate Raw Speed
-  if (acc_pulses > 0)
-  {
-    float avg_period_us = (float)acc_period / (float)acc_pulses;
-    current_mph = (1000000.0f / avg_period_us) / PULSE_FREQ_TO_MPH;
-
-    // --- SIMULATOR GLITCH FILTER ---
-    // Catch skipped/elongated pulses by enforcing real-world physics caps.
-    if (s_last_update_us > 0)
-    {
-      float dt = (float)(now - s_last_update_us) / 1000000.0f;
-      if (dt > 0.01f && dt < 0.2f)
-      {
-        float max_drop = 35.0f * dt; // Max braking threshold (~1.7 MPH per 50ms)
-        float max_jump = 25.0f * dt; // Max acceleration threshold (~1.2 MPH per 50ms)
-
-        if (current_mph < (s_last_valid_mph - max_drop))
-        {
-          current_mph = s_last_valid_mph - max_drop; // Ignore the dropped pulse
-        }
-        else if (current_mph > (s_last_valid_mph + max_jump))
-        {
-          current_mph = s_last_valid_mph + max_jump; // Ignore the false double-pulse
-        }
-      }
-    }
-    s_last_valid_mph = current_mph;
-  }
-  else if (last_pulse == 0)
-  {
-    // Complete stop
-    current_mph = 0.0f;
-    s_last_valid_mph = 0.0f;
+    s_last_update_us = now;
   }
   else
   {
-    // No pulses this window: Decay check with 50% buffer
-    if (s_last_valid_mph > 0.5f)
-    {
-      float expected_period_us = 1000000.0f / (s_last_valid_mph * PULSE_FREQ_TO_MPH);
+    // 1. Safely grab accumulators
+    noInterrupts();
+    uint32_t acc_period = s_acc_period_us;
+    uint32_t acc_pulses = s_acc_pulses;
+    uint32_t last_pulse = s_last_pulse_us;
 
-      if (time_since_last > (uint32_t)(expected_period_us * 1.5f))
+    if (acc_pulses > 0)
+    {
+      s_acc_period_us = 0;
+      s_acc_pulses = 0;
+    }
+
+    uint32_t time_since_last = (last_pulse > 0) ? (now - last_pulse) : 0;
+
+    // SAFE TIMEOUT RESET: Must be inside noInterrupts to prevent ISR race conditions
+    if (time_since_last > SNAP_TO_ZERO_US)
+    {
+      s_last_pulse_us = 0;
+      last_pulse = 0;
+    }
+    interrupts();
+
+    // 2. Calculate Raw Speed
+    if (acc_pulses > 0)
+    {
+      float avg_period_us = (float)acc_period / (float)acc_pulses;
+      current_mph = (1000000.0f / avg_period_us) / PULSE_FREQ_TO_MPH;
+
+      // --- SIMULATOR GLITCH FILTER ---
+      // Catch skipped/elongated pulses by enforcing real-world physics caps.
+      if (s_last_update_us > 0)
       {
-        float max_possible_mph = (1000000.0f / (float)time_since_last) / PULSE_FREQ_TO_MPH;
-        current_mph = max_possible_mph;
+        float dt = (float)(now - s_last_update_us) / 1000000.0f;
+        if (dt > 0.01f && dt < 0.2f)
+        {
+          float max_drop = 35.0f * dt; // Max braking threshold (~1.7 MPH per 50ms)
+          float max_jump = 25.0f * dt; // Max acceleration threshold (~1.2 MPH per 50ms)
+
+          if (current_mph < (s_last_valid_mph - max_drop))
+          {
+            current_mph = s_last_valid_mph - max_drop; // Ignore the dropped pulse
+          }
+          else if (current_mph > (s_last_valid_mph + max_jump))
+          {
+            current_mph = s_last_valid_mph + max_jump; // Ignore the false double-pulse
+          }
+        }
       }
-      else
-      {
-        current_mph = s_last_valid_mph; // Hold steady
-      }
+      s_last_valid_mph = current_mph;
+    }
+    else if (last_pulse == 0)
+    {
+      // Complete stop
+      current_mph = 0.0f;
+      s_last_valid_mph = 0.0f;
     }
     else
     {
-      current_mph = 0.0f;
-    }
-  }
+      // No pulses this window: Decay check with 50% buffer
+      if (s_last_valid_mph > 0.5f)
+      {
+        float expected_period_us = 1000000.0f / (s_last_valid_mph * PULSE_FREQ_TO_MPH);
 
-  s_last_update_us = now;
+        if (time_since_last > (uint32_t)(expected_period_us * 1.5f))
+        {
+          float max_possible_mph = (1000000.0f / (float)time_since_last) / PULSE_FREQ_TO_MPH;
+          current_mph = max_possible_mph;
+        }
+        else
+        {
+          current_mph = s_last_valid_mph; // Hold steady
+        }
+      }
+      else
+      {
+        current_mph = 0.0f;
+      }
+    }
+
+    s_last_update_us = now;
+  }
 
   // 3. Apply parametric smoothing
   s_smoothed_mph = (current_mph * FILTER_WEIGHT) + (s_smoothed_mph * (1.0f - FILTER_WEIGHT));
+
+  // Hard snap to zero to prevent the exponential moving average floating point from decaying infinitely above 0.0
+  if (current_mph < 0.5f && s_smoothed_mph < 0.5f)
+  {
+    s_smoothed_mph = 0.0f;
+  }
 
   // 4. Dispatch
   espnow_speed_packet_t pkt = {.speed_mph = s_smoothed_mph};
@@ -236,7 +260,7 @@ void setup()
   // Driven by SAMPLE_INTERVAL_MS
   s_sample_ticker.attach_ms(SAMPLE_INTERVAL_MS, sample_and_send);
 
-  Serial.println("VSS System Initialized at 50ms intervals.");
+  Serial.println("VSS System Initialized at 100ms intervals.");
 }
 
 void loop()

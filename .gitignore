@@ -1,0 +1,22 @@
+# PlatformIO build artifacts
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# IDE settings (VS Code, CLion, etc.)
+.vscode/
+.idea/
+.clang_complete
+gcc-flags.json
+
+# Build-time generated CMake files (if using CLion)
+cmake-build-*/
+CMakeLists.txt
+
+# Local secrets (optional, but recommended)
+secret.h
+credentials.h
+*.ini.local
+
+.DS_Store
+Thumbs.db

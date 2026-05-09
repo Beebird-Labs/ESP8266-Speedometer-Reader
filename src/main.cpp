@@ -26,11 +26,6 @@ static uint8_t receiver_mac[6] = {0x98, 0x88, 0xE0, 0x76, 0x93, 0xEC};
 // Logic Globals
 // ---------------------------------------------------------------------------
 
-typedef struct __attribute__((packed))
-{
-  float speed_mph;
-} espnow_speed_packet_t;
-
 static volatile uint32_t s_acc_period_us = 0;
 static volatile uint32_t s_acc_pulses = 0;
 static volatile uint32_t s_last_pulse_us = 0;
@@ -42,6 +37,8 @@ static Ticker s_sample_ticker;
 
 static float s_previous_mph = 0.0f;
 static uint32_t s_last_update_us = 0;
+
+static bool s_output_kph = false; // Set to true to output KPH instead of MPH
 
 // ---------------------------------------------------------------------------
 // ISR
@@ -230,8 +227,16 @@ static void sample_and_send()
   }
 
   // 4. Dispatch
-  espnow_speed_packet_t pkt = {.speed_mph = s_smoothed_mph};
-  esp_now_send(receiver_mac, (uint8_t *)&pkt, sizeof(pkt));
+  char payload[32];
+  if (s_output_kph)
+  {
+    snprintf(payload, sizeof(payload), "SP,K,%.0f", s_smoothed_mph * 1.609344f);
+  }
+  else
+  {
+    snprintf(payload, sizeof(payload), "SP,M,%.0f", s_smoothed_mph);
+  }
+  esp_now_send(receiver_mac, (uint8_t *)payload, strlen(payload));
 }
 
 // ---------------------------------------------------------------------------

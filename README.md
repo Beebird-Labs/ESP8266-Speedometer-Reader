@@ -36,12 +36,13 @@ static uint8_t receiver_mac = {0x98, 0x88, 0xE0, 0x76, 0x93, 0xEC};
 
 ### 2. Sensor Tuning
 
-Adjust these macros in `main.cpp` based on your specific vehicle or sensor:
+Adjust these macros and variables in `main.cpp` based on your specific vehicle or sensor:
 
 - `PULSE_FREQ_TO_MPH`: The conversion factor from pulse frequency (Hz) to MPH.
 - `SPEED_PIN`: The GPIO pin connected to your sensor (Default is `5`).
 - `FILTER_WEIGHT`: Controls the amount of smoothing applied to the final output (Default `0.40f`).
 - `SPEED_DEADZONE_US`: Hardware debounce duration in microseconds to prevent false triggers (Default `2000UL`).
+- `s_output_kph`: A boolean flag to control the output unit. Set to `false` (default) for MPH or `true` for KPH.
 
 ## Usage
 
@@ -51,16 +52,12 @@ Adjust these macros in `main.cpp` based on your specific vehicle or sensor:
 
 ## Protocol Payload
 
-The data is transmitted via ESP-NOW using the following packed structure:
+The data is transmitted via ESP-NOW as a standard formatted string:
 
-```cpp
-typedef struct __attribute__((packed))
-{
-  float speed_mph;
-} espnow_speed_packet_t;
-```
+- **MPH:** `"SP,M,<speed>"` (e.g., `"SP,M,55"`)
+- **KPH:** `"SP,K,<speed>"` (e.g., `"SP,K,88"`)
 
-Ensure your receiver implements this exact struct to properly decode the incoming bytes.
+Ensure your receiver reads incoming bytes as a string/character array to parse the payload properly.
 
 ## License
 

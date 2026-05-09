@@ -246,7 +246,7 @@ static void sample_and_send()
 void setup()
 {
   Serial.begin(115200);
-  delay(100);
+  delay(1000);
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();

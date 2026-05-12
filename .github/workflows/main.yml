@@ -3,46 +3,37 @@ name: PlatformIO CI & Release
 on:
   push:
     branches: [ main ]
-    tags: 
-      - 'v*' # Triggers on tags like v1.0, v2.1.3
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
 jobs:
-  build:
+  test_build:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Required to create a release and upload assets
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - name: Setup PlatformIO
+        uses: ./pio-setup # Reference your local action
 
-      - name: Cache PlatformIO
-        uses: actions/cache@v5
-        with:
-          path: ~/.platformio
-          key: ${{ runner.os }}-platformio-${{ hashFiles('**/platformio.ini') }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - name: Install PlatformIO
-        run: pip install --upgrade platformio
-
-      - name: Run PlatformIO Build
+      - name: Run Build Check
         run: pio run
 
-      # Only runs if a tag was pushed (e.g., git push origin v1.0)
-      - name: Create Release and Upload Assets
-        if: startsWith(github.ref, 'refs/tags/')
+  create_release:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Setup PlatformIO
+        uses: ./.github/actions/pio-setup
+
+      - name: Build Production Binaries
+        run: pio run
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             .pio/build/*/firmware.bin
             .pio/build/*/firmware.elf
           generate_release_notes: true
-          draft: false
-          prerelease: false

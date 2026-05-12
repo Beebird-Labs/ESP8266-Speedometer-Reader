@@ -14,13 +14,15 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.platformio
+          # Use platformio.ini as the key since that's what defines your dependencies
           key: ${{ runner.os }}-platformio-${{ hashFiles('**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-          cache: 'pip' # Built-in caching is more efficient now
 
       - name: Install PlatformIO
         run: |
@@ -35,4 +37,3 @@ jobs:
         with:
           name: firmware
           path: .pio/build/*/firmware.*
-          archive: true # Set to false if you want raw files without a zip

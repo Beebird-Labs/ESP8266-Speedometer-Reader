@@ -25,7 +25,7 @@ jobs:
       contents: write
     steps:
       - name: Setup PlatformIO
-        uses: ./.github/actions/pio-setup
+        uses: ./.github/actions/pio
 
       - name: Build Production Binaries
         run: pio run

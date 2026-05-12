@@ -31,7 +31,7 @@ Before flashing the code to your ESP8266, make sure to update the following vari
 You **must** update the `receiver_mac` array with the MAC address of the device receiving the speed data:
 
 ```cpp
-static uint8_t receiver_mac = {0x98, 0x88, 0xE0, 0x76, 0x93, 0xEC};
+static uint8_t receiver_mac = {0xXX, 0xXX, 0xXX, 0xXX, 0xXX, 0xXX};
 ```
 
 ### 2. Sensor Tuning

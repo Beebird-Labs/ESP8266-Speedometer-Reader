@@ -17,7 +17,7 @@ This project uses an ESP8266 to read pulses from a speed sensor (such as a Vehic
 
 ## Hardware Requirements
 
-- ESP8266 Development Board (e.g., NodeMCU, Wemos D1 Mini)
+- ESP8266 Development Board (e.g., Wemos D1 Mini)
 - SPD signal connected to GPIO 5 (`D1` on most boards).
 - A second ESP8266/ESP32 configured as an ESP-NOW receiver.
 

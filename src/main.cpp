@@ -15,12 +15,19 @@
 
 // Speed sensor tuning
 #define FILTER_WEIGHT 0.40f // Parameterized smoothing
-#define PULSE_FREQ_TO_MPH 1.139f
+// Precomputed: 10,000,000 / 1.139 (PULSE_FREQ_TO_MPH). Yields speed in 0.1 MPH units
+// when used as: (acc_pulses * K_SPEED_X10) / acc_period_us
+static const uint32_t K_SPEED_X10 = 8779631UL;
 #define SPEED_DEADZONE_US 2000UL
 #define SNAP_TO_ZERO_US 500000UL
-#define MAX_ACCEL_MPH_PER_S 20.0f
+#define OUTPUT_KPH 0 // Set to 1 to output KPH instead of MPH
 
 static uint8_t receiver_mac[6] = {0x98, 0x88, 0xE0, 0x76, 0x93, 0xEC};
+
+struct __attribute__((packed)) SpeedPacket {
+  uint8_t  unit;  // 'M' or 'K'
+  uint16_t speed; // speed in 0.1 unit increments (e.g. 657 = 65.7 MPH)
+};
 
 // ---------------------------------------------------------------------------
 // Logic Globals
@@ -29,16 +36,28 @@ static uint8_t receiver_mac[6] = {0x98, 0x88, 0xE0, 0x76, 0x93, 0xEC};
 static volatile uint32_t s_acc_period_us = 0;
 static volatile uint32_t s_acc_pulses = 0;
 static volatile uint32_t s_last_pulse_us = 0;
-static volatile uint32_t s_last_isr_us = 0;
 
 static float s_smoothed_mph = 0.0f;
 static float s_last_valid_mph = 0.0f;
 static Ticker s_sample_ticker;
 
-static float s_previous_mph = 0.0f;
 static uint32_t s_last_update_us = 0;
 
-static bool s_output_kph = false; // Set to true to output KPH instead of MPH
+static volatile bool s_tick_flag = false;
+static uint32_t s_last_send_ok_ms = 0;
+static const uint32_t RADIO_WATCHDOG_MS = 10000;
+
+// ---------------------------------------------------------------------------
+// Callbacks
+// ---------------------------------------------------------------------------
+
+static void on_send(uint8_t *mac, uint8_t status)
+{
+  if (status == 0)
+    s_last_send_ok_ms = millis();
+}
+
+static void set_tick_flag() { s_tick_flag = true; }
 
 // ---------------------------------------------------------------------------
 // ISR
@@ -47,7 +66,7 @@ static bool s_output_kph = false; // Set to true to output KPH instead of MPH
 void ICACHE_RAM_ATTR speed_isr()
 {
   uint32_t now = micros();
-  if ((now - s_last_isr_us) > SPEED_DEADZONE_US)
+  if ((now - s_last_pulse_us) > SPEED_DEADZONE_US)
   {
     if (s_last_pulse_us > 0)
     {
@@ -55,7 +74,6 @@ void ICACHE_RAM_ATTR speed_isr()
       s_acc_pulses++;
     }
     s_last_pulse_us = now;
-    s_last_isr_us = now;
   }
 }
 
@@ -75,7 +93,7 @@ static const TestCycle TEST_CYCLES[] = {
 };
 static const int NUM_TEST_CYCLES = 3;
 
-static bool s_test_mode = false;
+static volatile bool s_test_mode = false;
 static int s_test_tick = 0;
 static float s_test_speed = 0.0f;
 
@@ -160,8 +178,7 @@ static void sample_and_send()
     // 2. Calculate Raw Speed
     if (acc_pulses > 0)
     {
-      float avg_period_us = (float)acc_period / (float)acc_pulses;
-      current_mph = (1000000.0f / avg_period_us) / PULSE_FREQ_TO_MPH;
+      current_mph = (float)((uint64_t)acc_pulses * K_SPEED_X10 / acc_period) * 0.1f;
 
       // --- SIMULATOR GLITCH FILTER ---
       // Catch skipped/elongated pulses by enforcing real-world physics caps.
@@ -196,12 +213,11 @@ static void sample_and_send()
       // No pulses this window: Decay check with 50% buffer
       if (s_last_valid_mph > 0.5f)
       {
-        float expected_period_us = 1000000.0f / (s_last_valid_mph * PULSE_FREQ_TO_MPH);
+        uint32_t expected_period_us = K_SPEED_X10 / (uint32_t)(s_last_valid_mph * 10.0f);
 
-        if (time_since_last > (uint32_t)(expected_period_us * 1.5f))
+        if (time_since_last > (expected_period_us + (expected_period_us >> 1)))
         {
-          float max_possible_mph = (1000000.0f / (float)time_since_last) / PULSE_FREQ_TO_MPH;
-          current_mph = max_possible_mph;
+          current_mph = (float)(K_SPEED_X10 / time_since_last) * 0.1f;
         }
         else
         {
@@ -227,16 +243,15 @@ static void sample_and_send()
   }
 
   // 4. Dispatch
-  char payload[32];
-  if (s_output_kph)
-  {
-    snprintf(payload, sizeof(payload), "SP,K,%.0f", s_smoothed_mph * 1.609344f);
-  }
-  else
-  {
-    snprintf(payload, sizeof(payload), "SP,M,%.0f", s_smoothed_mph);
-  }
-  esp_now_send(receiver_mac, (uint8_t *)payload, strlen(payload));
+  SpeedPacket pkt;
+#if OUTPUT_KPH
+  pkt.unit  = 'K';
+  pkt.speed = (uint16_t)(s_smoothed_mph * 16.09344f + 0.5f);
+#else
+  pkt.unit  = 'M';
+  pkt.speed = (uint16_t)(s_smoothed_mph * 10.0f + 0.5f);
+#endif
+  esp_now_send(receiver_mac, (uint8_t *)&pkt, sizeof(pkt));
 }
 
 // ---------------------------------------------------------------------------
@@ -257,19 +272,26 @@ void setup()
   }
 
   esp_now_set_self_role(ESP_NOW_ROLE_CONTROLLER);
+  esp_now_register_send_cb(on_send);
   esp_now_add_peer(receiver_mac, ESP_NOW_ROLE_SLAVE, WIFI_CHANNEL, NULL, 0);
 
   pinMode(SPEED_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(SPEED_PIN), speed_isr, FALLING);
 
-  // Driven by SAMPLE_INTERVAL_MS
-  s_sample_ticker.attach_ms(SAMPLE_INTERVAL_MS, sample_and_send);
+  s_sample_ticker.attach_ms(SAMPLE_INTERVAL_MS, set_tick_flag);
+  s_last_send_ok_ms = millis();
 
   Serial.println("VSS System Initialized at 100ms intervals.");
 }
 
 void loop()
 {
+  if (s_tick_flag)
+  {
+    s_tick_flag = false;
+    sample_and_send();
+  }
+
   if (Serial.available())
   {
     char c = Serial.read();
@@ -288,5 +310,13 @@ void loop()
       }
     }
   }
-  delay(100);
+
+  if (millis() - s_last_send_ok_ms > RADIO_WATCHDOG_MS)
+  {
+    Serial.println("Watchdog: radio hang detected, rebooting.");
+    delay(100);
+    ESP.restart();
+  }
+
+  yield();
 }

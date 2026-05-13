@@ -1,3 +1,5 @@
+[![PlatformIO CI & Release](https://github.com/cstoffel/ESP8266-Speedometer-Reader/actions/workflows/main.yml/badge.svg)](https://github.com/cstoffel/ESP8266-Speedometer-Reader/actions/workflows/main.yml)
+
 # ESP8266 Speedometer Reader
 
 This project uses an ESP8266 to read pulses from a speed sensor (such as a Vehicle Speed Sensor or wheel encoder), calculate the speed in MPH, and wirelessly transmit the data using the ESP-NOW protocol. This version specifically works for a 2000 Toyota Crown, but should work on other Toyotas of this vintage and should be easily adaptable to other manufacturers.

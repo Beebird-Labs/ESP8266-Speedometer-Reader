@@ -3,9 +3,6 @@ description: 'Shared steps to prepare the environment'
 runs:
   using: "composite"
   steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
     - name: Cache PlatformIO
       uses: actions/cache@v4
       with:

@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup PlatformIO
-        uses: ./pio-setup # Reference your local action
+        uses: ./.github/workflows/pio-setup # Reference your local action
 
       - name: Run Build Check
         run: pio run

@@ -9,6 +9,8 @@ This project uses an ESP8266 to read pulses from a speed sensor (such as a Vehic
   - **Physics-Based Glitch Filter**: Rejects impossible acceleration or deceleration (e.g., dropped or false double-pulses).
   - **Parametric Smoothing**: Applies an exponential moving average to stabilize speed readings.
 - **Low Latency Wireless**: Uses ESP-NOW to broadcast the calculated speed to a receiver at 100ms intervals.
+- **Binary Protocol**: Transmits speed as a compact packed struct rather than a formatted string for efficiency and precision.
+- **Radio Watchdog**: Automatically reboots if no successful ESP-NOW send is confirmed within 10 seconds.
 - **Built-in Test Mode**: Simulates speed profiles (acceleration/deceleration ramps) for testing the receiver without needing active sensor input.
 
 ## Hardware Requirements
@@ -24,25 +26,25 @@ This project uses an ESP8266 to read pulses from a speed sensor (such as a Vehic
 
 ## Configuration
 
-Before flashing the code to your ESP8266, make sure to update the following variables in `src/main.cpp` to match your specific setup:
+Before flashing the code to your ESP8266, make sure to update the following variables in [src/main.cpp](src/main.cpp) to match your specific setup:
 
 ### 1. ESP-NOW Receiver MAC Address
 
 You **must** update the `receiver_mac` array with the MAC address of the device receiving the speed data:
 
 ```cpp
-static uint8_t receiver_mac = {0xXX, 0xXX, 0xXX, 0xXX, 0xXX, 0xXX};
+static uint8_t receiver_mac[6] = {0xXX, 0xXX, 0xXX, 0xXX, 0xXX, 0xXX};
 ```
 
 ### 2. Sensor Tuning
 
 Adjust these macros and variables in `main.cpp` based on your specific vehicle or sensor:
 
-- `PULSE_FREQ_TO_MPH`: The conversion factor from pulse frequency (Hz) to MPH.
+- `K_SPEED_X10`: Precomputed speed conversion constant. Calculated as `10,000,000 / PULSE_FREQ_TO_MPH`. The default value of `8779631` corresponds to a `PULSE_FREQ_TO_MPH` of `1.139`. Adjust this for your vehicle's VSS output ratio.
 - `SPEED_PIN`: The GPIO pin connected to your sensor (Default is `5`).
 - `FILTER_WEIGHT`: Controls the amount of smoothing applied to the final output (Default `0.40f`).
 - `SPEED_DEADZONE_US`: Hardware debounce duration in microseconds to prevent false triggers (Default `2000UL`).
-- `s_output_kph`: A boolean flag to control the output unit. Set to `false` (default) for MPH or `true` for KPH.
+- `OUTPUT_KPH`: Compile-time flag to select output unit. Set to `0` (default) for MPH or `1` for KPH.
 
 ## Usage
 
@@ -52,12 +54,40 @@ Adjust these macros and variables in `main.cpp` based on your specific vehicle o
 
 ## Protocol Payload
 
-The data is transmitted via ESP-NOW as a standard formatted string:
+The data is transmitted via ESP-NOW as a packed binary struct (`SpeedPacket`):
 
-- **MPH:** `"SP,M,<speed>"` (e.g., `"SP,M,55"`)
-- **KPH:** `"SP,K,<speed>"` (e.g., `"SP,K,88"`)
+```cpp
+struct __attribute__((packed)) SpeedPacket {
+  uint8_t  unit;  // 'M' for MPH, 'K' for KPH
+  uint16_t speed; // speed in 0.1 unit increments (e.g. 657 = 65.7 MPH)
+};
+```
 
-Ensure your receiver reads incoming bytes as a string/character array to parse the payload properly.
+The total payload is **3 bytes**. On the receiver, cast the incoming data buffer directly to a `SpeedPacket*` to decode it:
+
+```cpp
+void on_receive(uint8_t *mac, uint8_t *data, uint8_t len) {
+  if (len == sizeof(SpeedPacket)) {
+    SpeedPacket *pkt = (SpeedPacket *)data;
+    float speed = pkt->speed * 0.1f; // convert to float
+    char unit = (char)pkt->unit;     // 'M' or 'K'
+  }
+}
+```
+
+## CI/CD
+
+This project uses GitHub Actions for automated builds and releases:
+
+- **On push to `main` or pull request**: Runs a full PlatformIO build to verify the firmware compiles successfully.
+- **On tag push (`v*`)**: Builds production binaries and creates a GitHub Release with the compiled `firmware.bin` and `firmware.elf` artifacts attached.
+
+To cut a release, push a version tag:
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
 
 ## License
 

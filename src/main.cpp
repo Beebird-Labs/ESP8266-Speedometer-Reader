@@ -22,10 +22,11 @@ static const uint32_t K_SPEED_X10 = 8779631UL;
 #define SNAP_TO_ZERO_US 500000UL
 #define OUTPUT_KPH 0 // Set to 1 to output KPH instead of MPH
 
-static uint8_t receiver_mac[6] = {0x98, 0x88, 0xE0, 0x76, 0x93, 0xEC};
+static uint8_t receiver_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-struct __attribute__((packed)) SpeedPacket {
-  uint8_t  unit;  // 'M' or 'K'
+struct __attribute__((packed)) SpeedPacket
+{
+  uint8_t unit;   // 'M' or 'K'
   uint16_t speed; // speed in 0.1 unit increments (e.g. 657 = 65.7 MPH)
 };
 
@@ -245,10 +246,10 @@ static void sample_and_send()
   // 4. Dispatch
   SpeedPacket pkt;
 #if OUTPUT_KPH
-  pkt.unit  = 'K';
+  pkt.unit = 'K';
   pkt.speed = (uint16_t)(s_smoothed_mph * 16.09344f + 0.5f);
 #else
-  pkt.unit  = 'M';
+  pkt.unit = 'M';
   pkt.speed = (uint16_t)(s_smoothed_mph * 10.0f + 0.5f);
 #endif
   esp_now_send(receiver_mac, (uint8_t *)&pkt, sizeof(pkt));

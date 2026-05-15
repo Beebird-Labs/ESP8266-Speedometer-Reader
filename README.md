@@ -32,11 +32,11 @@ Before flashing the code to your ESP8266, make sure to update the following vari
 
 ### 1. ESP-NOW Receiver MAC Address
 
-You **must** update the `receiver_mac` array with the MAC address of the device receiving the speed data:
-
 ```cpp
-static uint8_t receiver_mac[6] = {0xXX, 0xXX, 0xXX, 0xXX, 0xXX, 0xXX};
+static uint8_t receiver_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 ```
+
+**NOTE:** `{0xFF,0xFF,0xFF,0xFF,0xFF,0xFF}` will broadcast to all receivers. If you want to target a single device, you must these values with the MAC addresss from that device.
 
 ### 2. Sensor Tuning
 

@@ -93,4 +93,4 @@ git push origin v1.0.0
 
 ## License
 
-This project is provided as-is. Feel free to modify and adapt it for your specific speed-reading needs.
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
